@@ -13,7 +13,6 @@
         
         <!-- Navigation Menu (always visible when authenticated) -->
         <nav v-if="isAuthenticated" class="main-nav">
-          <router-link to="/" class="nav-link">Home</router-link>
           <router-link to="/verification" class="nav-link">Verification</router-link>
         </nav>
         
