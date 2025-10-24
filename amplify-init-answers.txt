@@ -1,0 +1,12 @@
+yes
+VN Registrar Frontend
+frontend
+javascript
+vue
+src
+dist
+npm run build
+npm run dev
+y
+default
+y

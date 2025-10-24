@@ -68,3 +68,8 @@ coverage/
 # Temporary folders
 tmp/
 temp/
+
+# amplify
+.amplify
+amplify_outputs*
+amplifyconfiguration*

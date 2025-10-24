@@ -2,6 +2,10 @@
 
 A Vue 3 application for domain verification document management with Google OAuth authentication.
 
+## Live Demo
+- **Repository**: https://github.com/Hi-Tek-Enterprises/vnregistrar-verification-docs-upload
+- **Demo**: Deploy to AWS Amplify or Netlify using the deployment guide below
+
 ## 🚀 Features
 
 - **Google OAuth Authentication** - Secure login with Google accounts
@@ -154,6 +158,40 @@ export default defineConfig({
 4. Test thoroughly
 5. Submit a pull request
 
-## 📄 License
+## � Deployment
+
+### **AWS Amplify (Recommended)**
+
+Since the Amplify CLI has interactive prompt issues, use the AWS Console:
+
+1. **Push to GitHub** (already done)
+   ```bash
+   git push origin main
+   ```
+
+2. **Deploy via AWS Amplify Console**
+   - Go to [AWS Amplify Console](https://console.aws.amazon.com/amplify/)
+   - Click "New app" > "Host web app"
+   - Connect to GitHub: `Hi-Tek-Enterprises/vnregistrar-verification-docs-upload`
+   - Configure build settings:
+     - Build command: `npm run build`
+     - Output directory: `dist`
+   - Add environment variables:
+     - `VITE_GOOGLE_CLIENT_ID`: Your Google OAuth client ID
+     - `VITE_API_BASE_URL`: Your production backend URL
+
+3. **Update Google OAuth Origins**
+   - Add your Amplify domain to authorized origins
+   - Example: `https://main.d1234567890.amplifyapp.com`
+
+### **Alternative: Netlify**
+
+1. Build the project: `npm run build`
+2. Drag `dist` folder to [Netlify Drop](https://app.netlify.com/drop)
+3. Configure environment variables in Netlify dashboard
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions.
+
+## �📄 License
 
 This project is private and proprietary.
