@@ -4,7 +4,11 @@
     <header class="app-header">
       <div class="header-container">
         <div class="brand">
-          <h2>VN Registrar</h2>
+          <img src="https://vnregistrar-static.s3.us-west-1.amazonaws.com/hi-tek_logo.jpg" alt="Hi-Tek Logo" class="brand-logo">
+          <div class="brand-text">
+            <h2>VN Registrar</h2>
+            <span class="brand-subtitle">Domain Verification</span>
+          </div>
         </div>
         
         <!-- Navigation Menu (always visible when authenticated) -->
@@ -144,12 +148,13 @@ body {
 
 /* Header Styles */
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
   color: white;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   position: sticky;
   top: 0;
   z-index: 1000;
+  border-bottom: 3px solid #dc3545;
 }
 
 .header-container {
@@ -159,13 +164,44 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
-  height: 64px;
+  height: 72px;
 }
 
-.brand h2 {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  background: white;
+  padding: 4px;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-text h2 {
   color: white;
-  font-weight: 600;
-  font-size: 1.5rem;
+  font-weight: 700;
+  font-size: 1.4rem;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.brand-subtitle {
+  color: #dc3545;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Navigation Styles */
@@ -177,26 +213,30 @@ body {
 }
 
 .nav-link {
-  padding: 10px 20px;
+  padding: 12px 24px;
   text-decoration: none;
   color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
   font-size: 1rem;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: all 0.3s ease;
   position: relative;
+  border: 2px solid transparent;
 }
 
 .nav-link:hover {
   color: white;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(220, 53, 69, 0.2);
+  border-color: rgba(220, 53, 69, 0.3);
   transform: translateY(-1px);
 }
 
 .nav-link.router-link-active {
   color: white;
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: #dc3545;
   font-weight: 600;
+  border-color: #dc3545;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
 .nav-link.router-link-active::after {
@@ -207,7 +247,7 @@ body {
   transform: translateX(-50%);
   width: 80%;
   height: 2px;
-  background-color: white;
+  background-color: #ffffff;
   border-radius: 1px;
 }
 
@@ -224,19 +264,22 @@ body {
 }
 
 .logout-btn {
-  padding: 8px 16px;
-  background-color: rgba(255, 255, 255, 0.2);
+  padding: 10px 18px;
+  background-color: transparent;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
   cursor: pointer;
   font-weight: 500;
   transition: all 0.3s ease;
 }
 
 .logout-btn:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(220, 53, 69, 0.2);
+  border-color: #dc3545;
+  color: #dc3545;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
 }
 
 /* Main Content */
@@ -251,15 +294,27 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 64px);
-  gap: 24px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: calc(100vh - 72px);
+  gap: 32px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  position: relative;
+}
+
+.auth-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2c2c2c 0%, #dc3545 100%);
 }
 
 .auth-container h2 {
-  color: #333;
-  font-size: 1.8rem;
-  font-weight: 600;
+  color: #2c2c2c;
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
 }
 
 .content {
@@ -272,19 +327,27 @@ body {
 @media (max-width: 768px) {
   .header-container {
     padding: 0 16px;
-    height: 56px;
+    height: 64px;
   }
   
-  .brand h2 {
-    font-size: 1.3rem;
+  .brand-logo {
+    height: 40px;
+  }
+  
+  .brand-text h2 {
+    font-size: 1.2rem;
+  }
+  
+  .brand-subtitle {
+    font-size: 0.7rem;
   }
   
   .main-nav {
-    gap: 16px;
+    gap: 12px;
   }
   
   .nav-link {
-    padding: 8px 12px;
+    padding: 8px 16px;
     font-size: 0.9rem;
   }
   
@@ -293,18 +356,30 @@ body {
   }
   
   .logout-btn {
-    padding: 6px 12px;
+    padding: 8px 14px;
     font-size: 0.9rem;
   }
 }
 
 @media (max-width: 480px) {
+  .brand {
+    gap: 8px;
+  }
+  
+  .brand-logo {
+    height: 36px;
+  }
+  
+  .brand-text h2 {
+    font-size: 1.1rem;
+  }
+  
   .main-nav {
     gap: 8px;
   }
   
   .nav-link {
-    padding: 6px 10px;
+    padding: 6px 12px;
     font-size: 0.85rem;
   }
 }

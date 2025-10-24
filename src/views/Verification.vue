@@ -544,16 +544,46 @@ export default {
 .verification-page {
   min-height: 100%;
   padding: 32px 20px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  position: relative;
+}
+
+.verification-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2c2c2c 0%, #dc3545 100%);
 }
 
 .container {
   max-width: 1000px;
   margin: 0 auto;
   background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(44, 44, 44, 0.1);
+  border: 1px solid rgba(44, 44, 44, 0.1);
+}
+
+.container h1 {
+  color: #2c2c2c;
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.container h1::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(90deg, #2c2c2c 0%, #dc3545 100%);
+  margin: 12px auto 24px auto;
+  border-radius: 2px;
 }
 
 .form-row {
@@ -576,19 +606,43 @@ export default {
 }
 
 .form-row button {
-  padding: 8px 16px;
-  background: #007bff;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(44, 44, 44, 0.3);
 }
 
-.form-row button:disabled { opacity: 0.6; cursor: not-allowed }
+.form-row button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2c2c2c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(44, 44, 44, 0.4);
+}
+
+.form-row button:disabled { 
+  opacity: 0.6; 
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 6px rgba(44, 44, 44, 0.2);
+}
 
 .status { margin-bottom: 16px }
-.loading { color: #0d6efd }
-.error { color: #d9534f }
+.loading { 
+  color: #2c2c2c;
+  font-weight: 600;
+}
+.error { 
+  color: #dc3545;
+  font-weight: 600;
+  padding: 12px;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+}
 
 .results .empty { color: #666; padding: 24px; text-align: center }
 
@@ -598,17 +652,18 @@ export default {
 
 .results-header {
   margin-bottom: 16px;
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border-left: 4px solid #007bff;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border-left: 4px solid #dc3545;
+  border: 1px solid rgba(44, 44, 44, 0.1);
 }
 
 .results-header h3 {
   margin: 0;
-  color: #495057;
-  font-size: 1.1rem;
-  font-weight: 600;
+  color: #2c2c2c;
+  font-size: 1.2rem;
+  font-weight: 700;
 }
 
 .table-container {
@@ -694,25 +749,30 @@ export default {
 }
 
 .pdf-btn {
-  background: #007bff;
+  background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
   color: white;
   border: none;
-  border-radius: 4px;
-  padding: 6px 10px;
+  border-radius: 6px;
+  padding: 8px 12px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 600;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(44, 44, 44, 0.3);
 }
 
 .pdf-btn:hover:not(:disabled) {
-  background: #0056b3;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2c2c2c 100%);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(44, 44, 44, 0.4);
 }
 
 .pdf-btn:disabled {
   background: #6c757d;
   cursor: not-allowed;
   opacity: 0.6;
+  transform: none;
+  box-shadow: 0 1px 4px rgba(108, 117, 125, 0.3);
 }
 
 /* Responsive table */
@@ -748,25 +808,31 @@ export default {
 }
 
 .bulk-create-btn {
-  background: #28a745;
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
   color: white;
   border: none;
-  border-radius: 6px;
-  padding: 10px 20px;
+  border-radius: 8px;
+  padding: 12px 24px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .bulk-create-btn:hover:not(:disabled) {
-  background: #218838;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #c82333 0%, #dc3545 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
 }
 
 .bulk-create-btn:disabled {
   background: #6c757d;
   cursor: not-allowed;
   opacity: 0.6;
+  transform: none;
+  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.3);
 }
 
 .checkbox-column {
@@ -935,19 +1001,21 @@ export default {
 }
 
 .download-btn {
-  background: #007bff;
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
   color: white;
   border: none;
-  border-radius: 6px;
-  padding: 10px 20px;
+  border-radius: 8px;
+  padding: 12px 24px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
 .download-btn:hover {
-  background: #0056b3;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #c82333 0%, #dc3545 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
 }
 
 .close-btn {
