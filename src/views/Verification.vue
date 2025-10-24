@@ -22,10 +22,36 @@
             <h3>{{ items.length }} record{{ items.length !== 1 ? 's' : '' }} found</h3>
           </div>
           
+          <div class="bulk-actions" v-if="items.length > 0">
+            <div class="select-all">
+              <label>
+                <input 
+                  type="checkbox" 
+                  :checked="isAllSelected" 
+                  @change="toggleSelectAll"
+                > Select All
+              </label>
+            </div>
+            <button 
+              class="bulk-create-btn" 
+              :disabled="selectedItems.length === 0 || bulkLoading"
+              @click="bulkCreatePdfs"
+            >
+              {{ bulkLoading ? 'Creating PDFs...' : `Bulk Create (${selectedItems.length})` }}
+            </button>
+          </div>
+
           <div class="table-container">
             <table class="results-table">
               <thead>
                 <tr>
+                  <th class="checkbox-column">
+                    <input 
+                      type="checkbox" 
+                      :checked="isAllSelected" 
+                      @change="toggleSelectAll"
+                    >
+                  </th>
                   <th>Domain</th>
                   <th>Registrant</th>
                   <th>Date To</th>
@@ -36,6 +62,14 @@
               </thead>
               <tbody>
                 <tr v-for="(item, idx) in items" :key="idx" :class="getRowClass(item)">
+                  <td class="checkbox-column">
+                    <input 
+                      type="checkbox" 
+                      :value="idx"
+                      v-model="selectedItems"
+                      :disabled="!item.domainName || !item.extension"
+                    >
+                  </td>
                   <td>{{ getItemField(item, 'domain') }}</td>
                   <td>{{ getItemField(item, 'registrant') }}</td>
                   <td>{{ getItemField(item, 'dateTo') }}</td>
@@ -59,6 +93,54 @@
         </div>
       </div>
     </div>
+
+    <!-- Bulk Result Modal -->
+    <div v-if="showBulkModal" class="modal-overlay" @click="closeBulkModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>Bulk PDF Generation Results</h3>
+          <button class="modal-close" @click="closeBulkModal">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="summary-stats">
+            <div class="stat-item success">
+              <span class="stat-number">{{ bulkResult.successCount || 0 }}</span>
+              <span class="stat-label">Successful</span>
+            </div>
+            <div class="stat-item failure">
+              <span class="stat-number">{{ bulkResult.failureCount || 0 }}</span>
+              <span class="stat-label">Failed</span>
+            </div>
+          </div>
+
+          <div v-if="bulkResult.failureCount > 0" class="failures-section">
+            <h4>Failed Domains:</h4>
+            <div class="failure-list">
+              <div 
+                v-for="result in failedResults" 
+                :key="`${result.domainName}${result.extension}`"
+                class="failure-item"
+              >
+                <strong>{{ result.domainName }}{{ result.extension }}</strong>
+                <span class="error-message">{{ result.errorMessage }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button 
+            v-if="bulkResult.zipFileBase64" 
+            @click="downloadBulkZip" 
+            class="download-btn"
+          >
+            Download ZIP
+          </button>
+          <button @click="closeBulkModal" class="close-btn">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -70,13 +152,27 @@ export default {
       handle: '',
       loading: false,
       error: null,
-      items: []
+      items: [],
+      selectedItems: [],
+      bulkLoading: false,
+      showBulkModal: false,
+      bulkResult: {}
+    }
+  },
+  computed: {
+    isAllSelected() {
+      const validItems = this.items.filter(item => item.domainName && item.extension)
+      return validItems.length > 0 && this.selectedItems.length === validItems.length
+    },
+    failedResults() {
+      return this.bulkResult.results ? this.bulkResult.results.filter(result => !result.success) : []
     }
   },
   methods: {
     async verifyHandle() {
       this.error = null
       this.items = []
+      this.selectedItems = []
 
       const h = (this.handle || '').trim()
       if (!h) {
@@ -329,6 +425,113 @@ export default {
         alert(`Failed to download PDF: ${err.message}`)
       }
     },
+    toggleSelectAll() {
+      const validItems = this.items
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.domainName && item.extension)
+        .map(({ index }) => index)
+
+      if (this.isAllSelected) {
+        this.selectedItems = []
+      } else {
+        this.selectedItems = [...validItems]
+      }
+    },
+    async bulkCreatePdfs() {
+      if (this.selectedItems.length === 0) {
+        alert('Please select at least one domain.')
+        return
+      }
+
+      // Get the Google auth token
+      const accessToken = localStorage.getItem('google_access_token')
+      if (!accessToken) {
+        alert('Authentication required. Please sign in first.')
+        return
+      }
+
+      this.bulkLoading = true
+      try {
+        // Build the domains array from selected items
+        const domains = this.selectedItems.map(index => {
+          const item = this.items[index]
+          return {
+            domainName: item.domainName,
+            extension: item.extension
+          }
+        })
+
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const response = await fetch(`${apiBase}/api/domain-verification/pdf/bulk`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ domains })
+        })
+
+        if (response.status === 401) {
+          alert('Session expired. Please sign in again.')
+          return
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => 'Unknown error')
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
+
+        const result = await response.json()
+        this.bulkResult = result
+        this.showBulkModal = true
+        
+        // Clear selections after successful request
+        this.selectedItems = []
+
+      } catch (err) {
+        console.error('Bulk PDF creation error:', err)
+        alert(`Failed to create bulk PDFs: ${err.message}`)
+      } finally {
+        this.bulkLoading = false
+      }
+    },
+    downloadBulkZip() {
+      if (!this.bulkResult.zipFileBase64) {
+        alert('No ZIP file available for download.')
+        return
+      }
+
+      try {
+        // Decode base64 to blob
+        const binaryString = atob(this.bulkResult.zipFileBase64)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+        
+        const blob = new Blob([bytes], { type: 'application/zip' })
+        const blobUrl = URL.createObjectURL(blob)
+        
+        // Create download link
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = `verification_pdfs_${new Date().toISOString().split('T')[0]}.zip`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // Clean up
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+        
+      } catch (err) {
+        console.error('ZIP download error:', err)
+        alert(`Failed to download ZIP: ${err.message}`)
+      }
+    },
+    closeBulkModal() {
+      this.showBulkModal = false
+      this.bulkResult = {}
+    },
     formatItem(item) {
       if (typeof item === 'string') return item
       try { return JSON.stringify(item, null, 2) } catch (e) { return String(item) }
@@ -524,8 +727,267 @@ export default {
   }
 }
 
+/* Bulk Actions */
+.bulk-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.select-all label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bulk-create-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.bulk-create-btn:hover:not(:disabled) {
+  background: #218838;
+  transform: translateY(-1px);
+}
+
+.bulk-create-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.checkbox-column {
+  width: 40px;
+  text-align: center;
+}
+
+.checkbox-column input[type="checkbox"] {
+  transform: scale(1.2);
+  cursor: pointer;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #495057;
+  font-size: 1.3rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.modal-close:hover {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 24px;
+  justify-content: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 24px;
+  border-radius: 8px;
+  min-width: 120px;
+}
+
+.stat-item.success {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.stat-item.failure {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.failures-section {
+  margin-top: 24px;
+}
+
+.failures-section h4 {
+  margin: 0 0 16px 0;
+  color: #721c24;
+  font-size: 1.1rem;
+}
+
+.failure-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.failure-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.failure-item strong {
+  color: #721c24;
+  font-size: 1rem;
+}
+
+.error-message {
+  color: #856404;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.download-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.download-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.close-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.close-btn:hover {
+  background: #545b62;
+  transform: translateY(-1px);
+}
+
 @media (max-width: 600px) {
   .form-row { flex-direction: column; align-items: stretch }
   .form-row label { min-width: unset }
+  
+  .bulk-actions {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .summary-stats {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .modal-content {
+    width: 95%;
+    margin: 10px;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+  }
 }
 </style>
