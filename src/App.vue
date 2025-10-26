@@ -98,6 +98,10 @@ export default {
       this.userInfo = JSON.parse(storedUserInfo)
       this.isAuthenticated = true
       this.isCheckingAccess = true
+      
+      // Clear stale access_allowed flag immediately so router guard doesn't use old value
+      try { localStorage.removeItem('access_allowed') } catch(e) {}
+      
       // verify access rights with backend using ID token
       try {
         const token = await ensureValidToken()
@@ -106,6 +110,7 @@ export default {
         } else {
           // Token invalid, treat as not authorized
           this.isAuthorized = false
+          this.accessDeniedModal = true
         }
       } catch (e) {
         console.warn('mounted: checkAccess failed', e)
@@ -251,11 +256,9 @@ export default {
         if (data && data.allowed === true) {
           this.isAuthorized = true
           this.accessDeniedModal = false
-          try { localStorage.setItem('access_allowed', 'true') } catch(e) {}
         } else {
           this.isAuthorized = false
           this.accessDeniedModal = true
-          try { localStorage.setItem('access_allowed', 'false') } catch(e) {}
           // Do NOT automatically logout the user here — keep the session present
           // so the access-denied modal can be displayed. The user may explicitly
           // choose to logout via the modal's Logout button.
