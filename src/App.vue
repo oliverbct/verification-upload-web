@@ -1,7 +1,7 @@
 <template> 
   <div id="app"> 
-    <!-- Header with Navigation -->
-    <header class="app-header">
+    <!-- Header with Navigation (hidden when backend denies access) -->
+    <header v-if="isAuthorized !== false" class="app-header">
       <div class="header-container">
         <div class="brand">
           <img src="https://vnregistrar-static.s3.us-west-1.amazonaws.com/hi-tek_logo.jpg" alt="Hi-Tek Logo" class="brand-logo">
@@ -37,6 +37,17 @@
       </div>
     </div>
 
+    <!-- Access Denied Modal (only Logout button) -->
+    <div v-if="accessDeniedModal" class="access-denied-overlay">
+      <div class="access-denied" @click.stop>
+        <h3>Access denied</h3>
+        <p>Your account is not authorized to use this application. If you believe this is an error, please contact the administrator.</p>
+        <div class="actions">
+          <button class="logout" @click="handleLogout">Logout</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content Area -->
     <main class="main-content">
       <div v-if="!isAuthenticated" class="auth-container">
@@ -45,7 +56,10 @@
       </div>
       
       <div v-else class="content">
-        <router-view></router-view>
+        <!-- Only render app routes when the backend explicitly allows this user -->
+        <router-view v-if="isAuthorized"></router-view>
+        <!-- If not authorized we keep the UI blocked and show the access denied modal -->
+        <div v-else class="access-block" style="min-height:60vh"></div>
       </div>
     </main>
   </div> 
@@ -129,10 +143,27 @@ export default {
       googleLogout()
       localStorage.removeItem('google_access_token')
       localStorage.removeItem('user_info')
+      localStorage.removeItem('access_allowed')
       this.isAuthenticated = false
       this.accessToken = null
       this.userInfo = null
       this.error = null
+      this.isAuthorized = false
+      this.accessDeniedModal = false
+      this.sessionExpiredModal = false
+
+      // Ensure the router navigates back to the login view/root
+      try {
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push({ path: '/' })
+          return
+        }
+      } catch (e) {
+        console.warn('router push failed during logout, falling back to window.location', e)
+      }
+
+      // Fallback to full reload to guarantee UI resets
+      try { window.location.href = '/' } catch (e) { /* best-effort */ }
     },
     
     getDisplayName() {
@@ -195,9 +226,14 @@ export default {
         if (data && data.allowed === true) {
           this.isAuthorized = true
           this.accessDeniedModal = false
+          try { localStorage.setItem('access_allowed', 'true') } catch(e) {}
         } else {
           this.isAuthorized = false
           this.accessDeniedModal = true
+          try { localStorage.setItem('access_allowed', 'false') } catch(e) {}
+          // Do NOT automatically logout the user here — keep the session present
+          // so the access-denied modal can be displayed. The user may explicitly
+          // choose to logout via the modal's Logout button.
         }
       } catch (e) {
         console.error('checkAccess error', e)
@@ -207,9 +243,8 @@ export default {
       }
     },
     closeAccessDenied() {
-      this.accessDeniedModal = false
-      // forcing logout to clear token
-      this.handleLogout()
+      // When programmatically called, treat as a request to log out.
+      try { this.handleLogout() } catch (e) { this.accessDeniedModal = false }
     }
     ,
     closeSessionModal() {

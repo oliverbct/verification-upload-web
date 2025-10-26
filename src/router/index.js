@@ -20,4 +20,18 @@ const router = createRouter({
   routes
 })
 
+// Simple global guard: if backend explicitly marked access as denied, prevent navigation
+router.beforeEach((to, from, next) => {
+  try {
+    const accessAllowed = localStorage.getItem('access_allowed')
+    if (accessAllowed === 'false') {
+      // redirect back to root where App.vue will show the access denied modal
+      return next({ path: '/' })
+    }
+  } catch (e) {
+    // ignore storage errors and allow navigation; App.vue will do server-side checks on mount
+  }
+  next()
+})
+
 export default router
