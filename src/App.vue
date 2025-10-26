@@ -53,6 +53,7 @@
  
 <script> 
 import { decodeCredential, googleLogout } from 'vue3-google-login'
+import { ensureValidToken } from './utils/auth.js'
 
 export default { 
   name: 'App',
@@ -62,7 +63,9 @@ export default {
       accessToken: null,
       userInfo: null,
       error: null,
-      sessionExpiredModal: false
+      sessionExpiredModal: false,
+      isAuthorized: true,
+      accessDeniedModal: false
     }
   },
   async mounted() {
@@ -74,6 +77,13 @@ export default {
       this.accessToken = storedToken
       this.userInfo = JSON.parse(storedUserInfo)
       this.isAuthenticated = true
+      // verify access rights with backend using ID token
+      try {
+        const token = await ensureValidToken()
+        if (token) await this.checkAccess(token)
+      } catch (e) {
+        console.warn('mounted: checkAccess failed', e)
+      }
     }
 
     // Listen for global session-expired events (dispatched by auth helpers)
@@ -103,6 +113,12 @@ export default {
         localStorage.setItem('user_info', JSON.stringify(this.userInfo))
         
         this.isAuthenticated = true
+        // After authentication, confirm if this user is allowed to use the site
+        try {
+          await this.checkAccess(response.credential)
+        } catch (e) {
+          console.warn('handleGoogleLogin: access check failed', e)
+        }
       } catch (err) {
         this.error = 'Authentication failed: ' + err.message
         console.error('Google login error:', err)
@@ -144,6 +160,56 @@ export default {
       }
       
       return fullName || this.userInfo.name
+    }
+    ,
+    async checkAccess(idToken) {
+      // idToken is the Google ID token (JWT)
+      if (!idToken) {
+        this.isAuthorized = false
+        this.accessDeniedModal = true
+        return
+      }
+
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const res = await fetch(`${apiBase}/api/me`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (res.status === 401) {
+          // Token invalid/expired - trigger session flow
+          window.dispatchEvent(new CustomEvent('session-expired'))
+          return
+        }
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(txt || `HTTP ${res.status}`)
+        }
+
+        const data = await res.json()
+        // Expect { allowed: true|false }
+        if (data && data.allowed === true) {
+          this.isAuthorized = true
+          this.accessDeniedModal = false
+        } else {
+          this.isAuthorized = false
+          this.accessDeniedModal = true
+        }
+      } catch (e) {
+        console.error('checkAccess error', e)
+        // On error, be conservative: deny access
+        this.isAuthorized = false
+        this.accessDeniedModal = true
+      }
+    },
+    closeAccessDenied() {
+      this.accessDeniedModal = false
+      // forcing logout to clear token
+      this.handleLogout()
     }
     ,
     closeSessionModal() {
@@ -433,4 +499,30 @@ body {
 .session-modal p { margin-bottom: 16px; color: #666 }
 .session-actions { display:flex; gap:12px; justify-content:center; align-items:center }
 .session-close { padding:8px 12px; border-radius:6px; border:none; background:#6c757d; color:white; cursor:pointer }
+
+/* Access denied modal */
+.access-denied-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1600;
+}
+.access-denied {
+  background: #fff;
+  padding: 28px;
+  border-radius: 10px;
+  max-width: 520px;
+  width: 92%;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+  text-align: center;
+}
+.access-denied h3 { color: #2c2c2c; margin-bottom: 8px }
+.access-denied p { color: #666; margin-bottom: 18px }
+.access-denied .actions { display:flex; gap:12px; justify-content:center }
+.access-denied .actions button { padding:10px 14px; border-radius:8px; border:none; cursor:pointer }
+.access-denied .logout { background:#dc3545; color:white }
+.access-denied .close { background:#6c757d; color:white }
 </style>
