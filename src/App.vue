@@ -56,8 +56,13 @@
       </div>
       
       <div v-else class="content">
+        <!-- Show loading indicator while checking access -->
+        <div v-if="isCheckingAccess" class="access-checking">
+          <div class="spinner"></div>
+          <p>Verifying access...</p>
+        </div>
         <!-- Only render app routes when the backend explicitly allows this user -->
-        <router-view v-if="isAuthorized"></router-view>
+        <router-view v-else-if="isAuthorized === true"></router-view>
         <!-- If not authorized we keep the UI blocked and show the access denied modal -->
         <div v-else class="access-block" style="min-height:60vh"></div>
       </div>
@@ -78,8 +83,9 @@ export default {
       userInfo: null,
       error: null,
       sessionExpiredModal: false,
-      isAuthorized: true,
-      accessDeniedModal: false
+      isAuthorized: null, // null = unknown/checking, true = allowed, false = denied
+      accessDeniedModal: false,
+      isCheckingAccess: false
     }
   },
   async mounted() {
@@ -91,13 +97,27 @@ export default {
       this.accessToken = storedToken
       this.userInfo = JSON.parse(storedUserInfo)
       this.isAuthenticated = true
+      this.isCheckingAccess = true
       // verify access rights with backend using ID token
       try {
         const token = await ensureValidToken()
-        if (token) await this.checkAccess(token)
+        if (token) {
+          await this.checkAccess(token)
+        } else {
+          // Token invalid, treat as not authorized
+          this.isAuthorized = false
+        }
       } catch (e) {
         console.warn('mounted: checkAccess failed', e)
+        // On error, deny access conservatively
+        this.isAuthorized = false
+        this.accessDeniedModal = true
+      } finally {
+        this.isCheckingAccess = false
       }
+    } else {
+      // No stored auth, user needs to sign in (authorized state irrelevant)
+      this.isAuthorized = null
     }
 
     // Listen for global session-expired events (dispatched by auth helpers)
@@ -127,11 +147,16 @@ export default {
         localStorage.setItem('user_info', JSON.stringify(this.userInfo))
         
         this.isAuthenticated = true
+        this.isCheckingAccess = true
         // After authentication, confirm if this user is allowed to use the site
         try {
           await this.checkAccess(response.credential)
         } catch (e) {
           console.warn('handleGoogleLogin: access check failed', e)
+          this.isAuthorized = false
+          this.accessDeniedModal = true
+        } finally {
+          this.isCheckingAccess = false
         }
       } catch (err) {
         this.error = 'Authentication failed: ' + err.message
@@ -560,4 +585,29 @@ body {
 .access-denied .actions button { padding:10px 14px; border-radius:8px; border:none; cursor:pointer }
 .access-denied .logout { background:#dc3545; color:white }
 .access-denied .close { background:#6c757d; color:white }
+
+/* Access checking (loading spinner) */
+.access-checking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+.access-checking p {
+  color: #666;
+  font-size: 1rem;
+}
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(220, 53, 69, 0.2);
+  border-top-color: #dc3545;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>
