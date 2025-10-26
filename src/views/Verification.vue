@@ -145,6 +145,7 @@
 </template>
 
 <script>
+import { ensureValidToken } from '../utils/auth.js'
 export default {
   name: 'Verification',
   data() {
@@ -180,10 +181,10 @@ export default {
         return
       }
 
-      // Get the Google auth token
-      const accessToken = localStorage.getItem('google_access_token')
+      // Ensure token is valid (will attempt silent refresh if available)
+      const accessToken = await ensureValidToken()
       if (!accessToken) {
-        this.error = 'Authentication required. Please sign in first.'
+        this.error = 'Authentication required. Please sign in again.'
         return
       }
 
@@ -373,10 +374,10 @@ export default {
         return
       }
 
-      // Get the Google auth token
-      const accessToken = localStorage.getItem('google_access_token')
+      // Ensure token is valid (will attempt silent refresh if available)
+      const accessToken = await ensureValidToken()
       if (!accessToken) {
-        alert('Authentication required. Please sign in first.')
+        // session-expired event will be dispatched from ensureValidToken()
         return
       }
 
@@ -443,10 +444,10 @@ export default {
         return
       }
 
-      // Get the Google auth token
-      const accessToken = localStorage.getItem('google_access_token')
+      // Ensure token is valid (will attempt silent refresh if available)
+      const accessToken = await ensureValidToken()
       if (!accessToken) {
-        alert('Authentication required. Please sign in first.')
+        // session-expired event will be dispatched from ensureValidToken()
         return
       }
 

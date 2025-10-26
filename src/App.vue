@@ -24,6 +24,19 @@
       </div>
     </header>
 
+    <!-- Session Expired Modal -->
+    <div v-if="sessionExpiredModal" class="session-modal-overlay" @click="closeSessionModal">
+      <div class="session-modal" @click.stop>
+        <h3>Session expired</h3>
+        <p>Your session has expired. Please sign in again to continue.</p>
+        <div class="session-actions">
+          <!-- Reuse the GoogleLogin button for re-authentication -->
+          <GoogleLogin :callback="handleGoogleLogin" />
+          <button class="session-close" @click="closeSessionModal">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content Area -->
     <main class="main-content">
       <div v-if="!isAuthenticated" class="auth-container">
@@ -48,7 +61,8 @@ export default {
       isAuthenticated: false,
       accessToken: null,
       userInfo: null,
-      error: null
+      error: null,
+      sessionExpiredModal: false
     }
   },
   async mounted() {
@@ -60,6 +74,15 @@ export default {
       this.accessToken = storedToken
       this.userInfo = JSON.parse(storedUserInfo)
       this.isAuthenticated = true
+    }
+
+    // Listen for global session-expired events (dispatched by auth helpers)
+    try {
+      window.addEventListener('session-expired', () => {
+        this.sessionExpiredModal = true
+      })
+    } catch (e) {
+      console.warn('Failed to attach session-expired listener', e)
     }
   },
   methods: {
@@ -121,6 +144,10 @@ export default {
       }
       
       return fullName || this.userInfo.name
+    }
+    ,
+    closeSessionModal() {
+      this.sessionExpiredModal = false
     }
   }
 } 
@@ -382,4 +409,28 @@ body {
     font-size: 0.85rem;
   }
 }
+
+/* Session modal */
+.session-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1500;
+}
+.session-modal {
+  background: #fff;
+  padding: 24px;
+  border-radius: 10px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  text-align: center;
+}
+.session-modal h3 { margin-bottom: 8px; color: #2c2c2c }
+.session-modal p { margin-bottom: 16px; color: #666 }
+.session-actions { display:flex; gap:12px; justify-content:center; align-items:center }
+.session-close { padding:8px 12px; border-radius:6px; border:none; background:#6c757d; color:white; cursor:pointer }
 </style>
