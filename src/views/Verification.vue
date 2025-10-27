@@ -3,10 +3,37 @@
     <div class="container">
       <h1>Verification</h1>
 
-      <div class="form-row">
+      <!-- Search Mode Selector -->
+      <div class="search-mode">
+        <label for="searchMode">Search Mode:</label>
+        <select id="searchMode" v-model="searchMode" @change="handleModeChange">
+          <option value="handle">Search by Handle</option>
+          <option value="verified">View All Verified Domains</option>
+        </select>
+      </div>
+
+      <!-- Handle Search Form -->
+      <div v-if="searchMode === 'handle'" class="form-row">
         <label for="handle">Handle</label>
-        <input id="handle" v-model="handle" placeholder="Enter handle" />
+        <input id="handle" v-model="handle" placeholder="Enter handle" @keyup.enter="verifyHandle" />
         <button :disabled="loading" @click="verifyHandle">Search</button>
+      </div>
+
+      <!-- Fetch All Verified Button -->
+      <div v-else-if="searchMode === 'verified'" class="verified-section">
+        <button @click="fetchAllVerified" :disabled="loading" class="fetch-btn">
+          {{ loading ? 'Loading...' : 'Load All Verified Domains' }}
+        </button>
+      </div>
+
+      <!-- Filter Input -->
+      <div v-if="items.length > 0" class="filter-section">
+        <input 
+          type="text" 
+          v-model="filterText" 
+          placeholder="Filter by domain name..."
+          class="filter-input"
+        />
       </div>
 
       <div class="status">
@@ -17,9 +44,12 @@
       <div class="results">
         <div v-if="items.length === 0 && !loading && !error" class="empty">No results</div>
 
-        <div v-else-if="items.length > 0" class="results-container">
+        <div v-else-if="filteredItems.length > 0" class="results-container">
           <div class="results-header">
-            <h3>{{ items.length }} record{{ items.length !== 1 ? 's' : '' }} found</h3>
+            <h3>
+              Showing {{ startRecord }}-{{ endRecord }} of {{ filteredItems.length }} record{{ filteredItems.length !== 1 ? 's' : '' }}
+              <span v-if="filterText" class="filter-active">(filtered from {{ items.length }} total)</span>
+            </h3>
           </div>
           
           <div class="bulk-actions" v-if="items.length > 0">
@@ -29,7 +59,7 @@
                   type="checkbox" 
                   :checked="isAllSelected" 
                   @change="toggleSelectAll"
-                > Select All
+                > Select All {{ selectedItems.length > 0 ? `(${selectedItems.length})` : '' }}
               </label>
             </div>
             <button 
@@ -48,29 +78,40 @@
                   <th class="checkbox-column">
                     <input 
                       type="checkbox" 
-                      :checked="isAllSelected" 
-                      @change="toggleSelectAll"
+                      :checked="isAllPageSelected" 
+                      @change="toggleSelectAllPage"
+                      title="Select all on this page"
                     >
                   </th>
-                  <th>Domain</th>
-                  <th>Registrant</th>
-                  <th>Date To</th>
-                  <th>Date Verified</th>
-                  <th>Verified</th>
+                  <th @click="sortBy('domain')" class="sortable">
+                    Domain <span class="sort-indicator">{{ getSortIndicator('domain') }}</span>
+                  </th>
+                  <th @click="sortBy('registrant')" class="sortable">
+                    Registrant <span class="sort-indicator">{{ getSortIndicator('registrant') }}</span>
+                  </th>
+                  <th @click="sortBy('dateTo')" class="sortable">
+                    Date To <span class="sort-indicator">{{ getSortIndicator('dateTo') }}</span>
+                  </th>
+                  <th @click="sortBy('dateVerified')" class="sortable">
+                    Date Verified <span class="sort-indicator">{{ getSortIndicator('dateVerified') }}</span>
+                  </th>
+                  <th @click="sortBy('verified')" class="sortable">
+                    Verified <span class="sort-indicator">{{ getSortIndicator('verified') }}</span>
+                  </th>
                   <th>PDF</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(item, idx) in items" :key="idx" :class="getRowClass(item)">
+                <tr v-for="item in paginatedItems" :key="getItemKey(item)" :class="getRowClass(item)">
                   <td class="checkbox-column">
                     <input 
                       type="checkbox" 
-                      :value="idx"
-                      v-model="selectedItems"
+                      :checked="isSelected(item)"
+                      @change="toggleSelection(item)"
                       :disabled="!item.domainName || !item.extension"
                     >
                   </td>
-                  <td>{{ getItemField(item, 'domain') }}</td>
+                  <td :title="getItemField(item, 'domain')">{{ getItemField(item, 'domain') }}</td>
                   <td>{{ getItemField(item, 'registrant') }}</td>
                   <td>{{ getItemField(item, 'dateTo') }}</td>
                   <td>{{ getItemField(item, 'dateVerified') }}</td>
@@ -89,6 +130,50 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Pagination Controls -->
+          <div class="pagination" v-if="totalPages > 1">
+            <button 
+              @click="goToPage(1)" 
+              :disabled="currentPage === 1"
+              class="page-btn"
+            >
+              ‹‹ First
+            </button>
+            <button 
+              @click="goToPage(currentPage - 1)" 
+              :disabled="currentPage === 1"
+              class="page-btn"
+            >
+              ‹ Prev
+            </button>
+            
+            <span class="page-numbers">
+              <button
+                v-for="page in visiblePages"
+                :key="page"
+                @click="goToPage(page)"
+                :class="['page-number', { active: page === currentPage }]"
+              >
+                {{ page }}
+              </button>
+            </span>
+
+            <button 
+              @click="goToPage(currentPage + 1)" 
+              :disabled="currentPage === totalPages"
+              class="page-btn"
+            >
+              Next ›
+            </button>
+            <button 
+              @click="goToPage(totalPages)" 
+              :disabled="currentPage === totalPages"
+              class="page-btn"
+            >
+              Last ››
+            </button>
           </div>
         </div>
       </div>
@@ -150,6 +235,7 @@ export default {
   name: 'Verification',
   data() {
     return {
+      searchMode: 'handle', // 'handle' or 'verified'
       handle: '',
       loading: false,
       error: null,
@@ -157,19 +243,279 @@ export default {
       selectedItems: [],
       bulkLoading: false,
       showBulkModal: false,
-      bulkResult: {}
+      bulkResult: {},
+      
+      // Pagination
+      currentPage: 1,
+      itemsPerPage: 100,
+      
+      // Sorting
+      sortField: null,
+      sortDirection: 'asc',
+      
+      // Filtering
+      filterText: ''
     }
   },
   computed: {
+    filteredItems() {
+      if (!this.filterText.trim()) {
+        return this.sortedItems
+      }
+      
+      const searchText = this.filterText.toLowerCase()
+      return this.sortedItems.filter(item => {
+        const domainText = this.getItemField(item, 'domain').toLowerCase()
+        return domainText.includes(searchText)
+      })
+    },
+    
+    sortedItems() {
+      if (!this.sortField) {
+        return this.items
+      }
+      
+      const sorted = [...this.items].sort((a, b) => {
+        let aVal = this.getItemField(a, this.sortField)
+        let bVal = this.getItemField(b, this.sortField)
+        
+        if (aVal === '-') aVal = ''
+        if (bVal === '-') bVal = ''
+        
+        // Date sorting
+        if (this.sortField === 'dateTo' || this.sortField === 'dateVerified') {
+          const aDate = new Date(aVal)
+          const bDate = new Date(bVal)
+          if (!isNaN(aDate) && !isNaN(bDate)) {
+            return this.sortDirection === 'asc' ? aDate - bDate : bDate - aDate
+          }
+        }
+        
+        // Verified status sorting
+        if (this.sortField === 'verified') {
+          const aVerified = this.getVerifiedValue(a)
+          const bVerified = this.getVerifiedValue(b)
+          return this.sortDirection === 'asc' ? aVerified - bVerified : bVerified - aVerified
+        }
+        
+        // String sorting
+        return this.sortDirection === 'asc' 
+          ? String(aVal).localeCompare(String(bVal))
+          : String(bVal).localeCompare(String(aVal))
+      })
+      
+      return sorted
+    },
+    
+    totalPages() {
+      return Math.ceil(this.filteredItems.length / this.itemsPerPage)
+    },
+    
+    paginatedItems() {
+      const start = (this.currentPage - 1) * this.itemsPerPage
+      const end = start + this.itemsPerPage
+      return this.filteredItems.slice(start, end)
+    },
+    
+    startRecord() {
+      return this.filteredItems.length === 0 ? 0 : (this.currentPage - 1) * this.itemsPerPage + 1
+    },
+    
+    endRecord() {
+      const end = this.currentPage * this.itemsPerPage
+      return Math.min(end, this.filteredItems.length)
+    },
+    
+    visiblePages() {
+      const pages = []
+      const maxVisible = 7
+      const halfVisible = Math.floor(maxVisible / 2)
+      
+      let start = Math.max(1, this.currentPage - halfVisible)
+      let end = Math.min(this.totalPages, start + maxVisible - 1)
+      
+      if (end - start < maxVisible - 1) {
+        start = Math.max(1, end - maxVisible + 1)
+      }
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      
+      return pages
+    },
+    
     isAllSelected() {
       const validItems = this.items.filter(item => item.domainName && item.extension)
-      return validItems.length > 0 && this.selectedItems.length === validItems.length
+      return validItems.length > 0 && validItems.every(item => this.isSelected(item))
     },
+    
+    isAllPageSelected() {
+      const validItems = this.paginatedItems.filter(item => item.domainName && item.extension)
+      return validItems.length > 0 && validItems.every(item => this.isSelected(item))
+    },
+    
     failedResults() {
       return this.bulkResult.results ? this.bulkResult.results.filter(result => !result.success) : []
     }
   },
   methods: {
+    handleModeChange() {
+      this.items = []
+      this.selectedItems = []
+      this.error = null
+      this.currentPage = 1
+      this.sortField = null
+      this.filterText = ''
+      this.handle = ''
+    },
+    
+    async fetchAllVerified() {
+      this.loading = true
+      this.error = null
+      this.items = []
+      this.selectedItems = []
+      
+      const accessToken = await ensureValidToken()
+      if (!accessToken) {
+        this.error = 'Authentication required. Please sign in again.'
+        this.loading = false
+        return
+      }
+      
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const res = await fetch(`${apiBase}/api/domain-verification/verified`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (res.status === 401) {
+          this.error = 'Session expired. Please sign in again.'
+          return
+        }
+        
+        if (!res.ok) {
+          const text = await res.text().catch(() => '')
+          throw new Error(text || `HTTP ${res.status}`)
+        }
+        
+        const data = await res.json()
+        
+        if (Array.isArray(data)) {
+          this.items = data
+        } else if (data && typeof data === 'object') {
+          if (Array.isArray(data.items)) this.items = data.items
+          else if (Array.isArray(data.results)) this.items = data.results
+          else this.items = [data]
+        } else {
+          this.items = []
+        }
+        
+        this.currentPage = 1
+      } catch (err) {
+        this.error = err.message || String(err)
+      } finally {
+        this.loading = false
+      }
+    },
+    
+    sortBy(field) {
+      if (this.sortField === field) {
+        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc'
+      } else {
+        this.sortField = field
+        this.sortDirection = 'asc'
+      }
+    },
+    
+    getSortIndicator(field) {
+      if (this.sortField !== field) return '⇅'
+      return this.sortDirection === 'asc' ? '↑' : '↓'
+    },
+    
+    goToPage(page) {
+      if (page >= 1 && page <= this.totalPages) {
+        this.currentPage = page
+      }
+    },
+    
+    getItemKey(item) {
+      return `${item.domainName || 'unknown'}-${item.extension || ''}-${Math.random()}`
+    },
+    
+    getVerifiedValue(item) {
+      const possibleFields = ['isVerified', 'verified', 'Verified', 'autoRenew', 'AutoRenew']
+      
+      for (const field of possibleFields) {
+        if (item[field] !== undefined && item[field] !== null) {
+          const value = item[field]
+          
+          if (typeof value === 'boolean') {
+            return value ? 1 : 0
+          }
+          
+          if (typeof value === 'string') {
+            if (value.toLowerCase() === 'true' || value.toLowerCase() === 'yes') return 1
+            if (value.toLowerCase() === 'false' || value.toLowerCase() === 'no') return 0
+          }
+          
+          if (typeof value === 'number' || !isNaN(value)) {
+            return parseInt(value) === 0 ? 1 : 0
+          }
+        }
+      }
+      return -1
+    },
+    
+    isSelected(item) {
+      return this.selectedItems.some(
+        selected => selected.domainName === item.domainName && selected.extension === item.extension
+      )
+    },
+    
+    toggleSelection(item) {
+      if (!item.domainName || !item.extension) return
+      
+      if (this.isSelected(item)) {
+        this.selectedItems = this.selectedItems.filter(
+          selected => !(selected.domainName === item.domainName && selected.extension === item.extension)
+        )
+      } else {
+        this.selectedItems.push(item)
+      }
+    },
+    
+    toggleSelectAll() {
+      const validItems = this.items.filter(item => item.domainName && item.extension)
+      
+      if (this.isAllSelected) {
+        this.selectedItems = []
+      } else {
+        this.selectedItems = [...validItems]
+      }
+    },
+    
+    toggleSelectAllPage() {
+      const validItems = this.paginatedItems.filter(item => item.domainName && item.extension)
+      
+      if (this.isAllPageSelected) {
+        validItems.forEach(item => {
+          this.selectedItems = this.selectedItems.filter(
+            selected => !(selected.domainName === item.domainName && selected.extension === item.extension)
+          )
+        })
+      } else {
+        validItems.forEach(item => {
+          if (!this.isSelected(item)) {
+            this.selectedItems.push(item)
+          }
+        })
+      }
+    },
+    
     async verifyHandle() {
       this.error = null
       this.items = []
@@ -181,7 +527,6 @@ export default {
         return
       }
 
-      // Ensure token is valid (will attempt silent refresh if available)
       const accessToken = await ensureValidToken()
       if (!accessToken) {
         this.error = 'Authentication required. Please sign in again.'
@@ -191,7 +536,6 @@ export default {
       this.loading = true
       try {
         const apiBase = import.meta.env.VITE_API_BASE_URL
-        // Call domain-verification endpoint, using query param 'handle'
         const res = await fetch(`${apiBase}/api/domain-verification?handle=${encodeURIComponent(h)}`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -200,9 +544,7 @@ export default {
         })
 
         if (res.status === 401) {
-          // Token expired or invalid, redirect to login
           this.error = 'Session expired. Please sign in again.'
-          // Could also emit event to parent or use router to go to login
           return
         }
 
@@ -216,68 +558,28 @@ export default {
         if (ctype.includes('application/json')) {
           data = await res.json()
         } else {
-          // try to parse text as JSON
           const txt = await res.text()
           try { data = JSON.parse(txt) } catch (e) { data = txt }
         }
 
-        // Expecting an array; fall back to object -> wrap, or empty array
         if (Array.isArray(data)) {
           this.items = data
         } else if (data && typeof data === 'object') {
-          // If object contains array under 'items' or 'results', use that
           if (Array.isArray(data.items)) this.items = data.items
           else if (Array.isArray(data.results)) this.items = data.results
           else this.items = [data]
         } else if (typeof data === 'string') {
-          // simple text response
           this.items = [data]
         } else {
           this.items = []
         }
+        
+        this.currentPage = 1
       } catch (err) {
         this.error = err.message || String(err)
       } finally {
         this.loading = false
       }
-    },
-    getItemField(item, fieldName) {
-      if (typeof item === 'string') return item
-
-      // Try different possible field name variations
-      const fieldMappings = {
-        domain: ['fullDomain', 'domain', 'Domain', 'domainName', 'name'],
-        registrant: ['registrant', 'Registrant', 'registrantName', 'owner'],
-        dateTo: ['dateTo', 'DateTo', 'expiryDate', 'expiry', 'expires', 'expiration'],
-        dateVerified: ['dateVerified', 'DateVerified', 'verifiedDate', 'verified', 'verificationDate'],
-        autoRenew: ['autoRenew', 'AutoRenew', 'autoRenewal', 'renewal', 'renew']
-      }
-
-      const possibleKeys = fieldMappings[fieldName] || [fieldName]
-      
-      for (const key of possibleKeys) {
-        if (item && typeof item === 'object' && key in item) {
-          const value = item[key]
-          
-          // Format boolean values
-          if (typeof value === 'boolean') {
-            return value ? 'Yes' : 'No'
-          }
-          
-          // Format dates if they look like dates
-          if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-            try {
-              return new Date(value).toLocaleDateString()
-            } catch (e) {
-              return value
-            }
-          }
-          
-          return value != null ? String(value) : '-'
-        }
-      }
-      
-      return '-'
     },
     decodeHtmlEntities(text) {
       if (typeof text !== 'string') return text
@@ -301,7 +603,7 @@ export default {
         registrant: ['registrant', 'Registrant', 'registrantName', 'owner'],
         dateTo: ['dateTo', 'DateTo', 'expiryDate', 'expiry', 'expires', 'expiration'],
         dateVerified: ['dateVerified', 'DateVerified', 'verifiedDate', 'verified', 'verificationDate'],
-        autoRenew: ['autoRenew', 'AutoRenew', 'autoRenewal', 'renewal', 'renew']
+        isVerified: ['isVerified', 'verified', 'Verified', 'autoRenew', 'AutoRenew']
       }
 
       const possibleKeys = fieldMappings[fieldName] || [fieldName]
@@ -331,15 +633,15 @@ export default {
       return '-'
     },
     getVerifiedDisplay(item) {
-      const verifiedValue = this.getItemField(item, 'autoRenew')
+      const verifiedValue = this.getItemField(item, 'isVerified')
       
-      // Handle string boolean values
-      if (verifiedValue === 'true' || verifiedValue === true) {
+      // Handle boolean values (new schema uses isVerified: boolean)
+      if (verifiedValue === 'Yes' || verifiedValue === 'true' || verifiedValue === true) {
         return '<span class="verified-yes">✓</span>'
-      } else if (verifiedValue === 'false' || verifiedValue === false) {
+      } else if (verifiedValue === 'No' || verifiedValue === 'false' || verifiedValue === false) {
         return '<span class="verified-no">✗</span>'
       } else {
-        // Fallback to numeric comparison for backwards compatibility
+        // Fallback to numeric comparison for backwards compatibility (old autoRenew: 0/1)
         const numValue = parseInt(verifiedValue)
         if (numValue === 0) {
           return '<span class="verified-yes">✓</span>'
@@ -350,15 +652,15 @@ export default {
       }
     },
     getRowClass(item) {
-      const verifiedValue = this.getItemField(item, 'autoRenew')
+      const verifiedValue = this.getItemField(item, 'isVerified')
       
-      // Handle string boolean values
-      if (verifiedValue === 'true' || verifiedValue === true) {
+      // Handle boolean values (new schema uses isVerified: boolean)
+      if (verifiedValue === 'Yes' || verifiedValue === 'true' || verifiedValue === true) {
         return 'row-verified'
-      } else if (verifiedValue === 'false' || verifiedValue === false) {
+      } else if (verifiedValue === 'No' || verifiedValue === 'false' || verifiedValue === false) {
         return 'row-unverified'
       } else {
-        // Fallback to numeric comparison for backwards compatibility
+        // Fallback to numeric comparison for backwards compatibility (old autoRenew: 0/1)
         const numValue = parseInt(verifiedValue)
         if (numValue === 0) {
           return 'row-verified'
@@ -560,7 +862,7 @@ export default {
 }
 
 .container {
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
   background: white;
   padding: 32px;
@@ -1035,6 +1337,230 @@ export default {
   transform: translateY(-1px);
 }
 
+/* Search Mode and Filter Styles */
+.search-mode {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(44, 44, 44, 0.1);
+}
+
+.search-mode label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #2c2c2c;
+}
+
+.search-mode select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  font-size: 16px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.search-mode select:focus {
+  outline: none;
+  border-color: #2c2c2c;
+  box-shadow: 0 0 0 3px rgba(44, 44, 44, 0.1);
+}
+
+.verified-section {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  border-radius: 12px;
+  border: 1px solid #28a745;
+  text-align: center;
+}
+
+.fetch-btn {
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fetch-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #218838 0%, #28a745 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+}
+
+.fetch-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.3);
+}
+
+.filter-section {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
+  border-radius: 12px;
+  border: 1px solid #ffc107;
+}
+
+.filter-section label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #2c2c2c;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: #ffc107;
+  box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.2);
+}
+
+.filter-input.filter-active {
+  border-color: #ffc107;
+  background: #fffef8;
+}
+
+/* Sortable Table Headers */
+.results-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 30px;
+  transition: background 0.2s ease;
+}
+
+.results-table th.sortable:hover {
+  background: #e9ecef;
+}
+
+.sort-indicator {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.results-table th.sortable.active {
+  background: #dee2e6;
+  font-weight: 700;
+  color: #2c2c2c;
+}
+
+.results-table th.sortable.active .sort-indicator {
+  color: #2c2c2c;
+}
+
+/* Pagination Styles */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #dee2e6;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  font-weight: 600;
+  color: #495057;
+  margin: 0 16px;
+  white-space: nowrap;
+}
+
+.page-btn {
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #495057;
+  transition: all 0.2s ease;
+  min-width: 40px;
+  text-align: center;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #e9ecef;
+  border-color: #2c2c2c;
+  color: #2c2c2c;
+}
+
+.page-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: #f8f9fa;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.page-number {
+  padding: 8px 14px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #495057;
+  transition: all 0.2s ease;
+  min-width: 40px;
+  text-align: center;
+}
+
+.page-number:hover {
+  background: #e9ecef;
+  border-color: #2c2c2c;
+  color: #2c2c2c;
+}
+
+.page-number.active {
+  background: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
+  color: white;
+  border-color: #2c2c2c;
+  box-shadow: 0 2px 8px rgba(44, 44, 44, 0.3);
+}
+
+.page-ellipsis {
+  padding: 8px 14px;
+  color: #6c757d;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: center;
+}
+
 @media (max-width: 600px) {
   .form-row { flex-direction: column; align-items: stretch }
   .form-row label { min-width: unset }
@@ -1057,6 +1583,29 @@ export default {
   
   .modal-footer {
     flex-direction: column;
+  }
+  
+  .pagination {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .pagination-info {
+    margin: 0;
+  }
+  
+  .page-numbers {
+    width: 100%;
+  }
+  
+  .results-table th.sortable {
+    padding-right: 24px;
+    font-size: 13px;
+  }
+  
+  .sort-indicator {
+    right: 6px;
+    font-size: 10px;
   }
 }
 </style>
