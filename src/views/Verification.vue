@@ -58,7 +58,7 @@
                 <input 
                   type="checkbox" 
                   :checked="isAllSelected" 
-                  @change="toggleSelectAll"
+                  @mousedown.prevent="toggleSelectAll"
                 > Select All {{ selectedItems.length > 0 ? `(${selectedItems.length})` : '' }}
               </label>
             </div>
@@ -79,7 +79,7 @@
                     <input 
                       type="checkbox" 
                       :checked="isAllPageSelected" 
-                      @change="toggleSelectAllPage"
+                      @mousedown.prevent="toggleSelectAllPage"
                       title="Select all on this page"
                     >
                   </th>
@@ -107,7 +107,7 @@
                     <input 
                       type="checkbox" 
                       :checked="isSelected(item)"
-                      @change="toggleSelection(item)"
+                      @mousedown.prevent="toggleSelection(item)"
                       :disabled="!item.domainName || !item.extension"
                     >
                   </td>
