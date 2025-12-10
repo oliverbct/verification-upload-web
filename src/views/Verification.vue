@@ -756,14 +756,10 @@ export default {
       this.bulkLoading = true
       try {
         // Build the domains array from selected items
-        const domains = this.selectedItems.map(index => {
-          const item = this.items[index]
-          return {
-            domainName: item.domainName,
-            extension: item.extension
-          }
-        })
-
+        const domains = this.selectedItems.map(item => ({
+          domainName: item.domainName,
+          extension: item.extension
+        }))
         const apiBase = import.meta.env.VITE_API_BASE_URL
         const response = await fetch(`${apiBase}/api/domain-verification/pdf/bulk`, {
           method: 'POST',
