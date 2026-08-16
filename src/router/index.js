@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Verification from '../views/Verification.vue'
+import BulkUpload from '../views/BulkUpload.vue'
 
 const routes = [
   {
@@ -12,6 +13,11 @@ const routes = [
     path: '/verification',
     name: 'Verification',
     component: Verification
+  },
+  {
+    path: '/bulk-upload',
+    name: 'BulkUpload',
+    component: BulkUpload
   }
 ]
 

@@ -119,13 +119,32 @@
                     <span v-html="getVerifiedDisplay(item)"></span>
                   </td>
                   <td class="pdf-cell">
-                    <button 
-                      @click="downloadPdf(item)" 
-                      :disabled="loading || !item.domainName || !item.extension"
-                      class="pdf-btn"
-                      title="Download PDF">
-                      📄
-                    </button>
+                    <div class="pdf-actions">
+                      <button 
+                        @click="downloadPdf(item)" 
+                        :disabled="loading || !item.domainName || !item.extension"
+                        class="pdf-btn"
+                        title="Download PDF">
+                        📄
+                      </button>
+                      <div class="upload-action">
+                        <button
+                          @click="uploadPdf(item)"
+                          :disabled="loading || !item.domainName || !item.extension || item.uploadStatus === 'loading'"
+                          class="upload-btn"
+                          :class="item.uploadStatus"
+                          :title="item.uploadStatus === 'error' && item.uploadError ? item.uploadError : 'Upload PDF to server'"
+                        >
+                          <span v-if="item.uploadStatus === 'loading'" class="upload-spinner"></span>
+                          <span v-else-if="item.uploadStatus === 'success'">✓</span>
+                          <span v-else-if="item.uploadStatus === 'error'">✕</span>
+                          <span v-else>⬆</span>
+                        </button>
+                        <div v-if="item.uploadStatus === 'error' && item.uploadError" class="upload-tooltip">
+                          {{ item.uploadError }}
+                        </div>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -369,6 +388,54 @@ export default {
       this.filterText = ''
       this.handle = ''
     },
+
+    normalizeItems(items) {
+      if (!Array.isArray(items)) return []
+
+      return items.map(item => {
+        if (typeof item !== 'object' || item === null) {
+          return item
+        }
+
+        return {
+          ...item,
+          uploadStatus: item.uploadStatus || 'idle',
+          uploadError: item.uploadError || null
+        }
+      })
+    },
+
+    setItemUploadState(item, status, error = null) {
+      if (!item || typeof item !== 'object') return
+
+      item.uploadStatus = status
+      item.uploadError = error
+    },
+
+    async parseErrorResponse(response) {
+      const text = await response.text().catch(() => '')
+
+      if (!text) {
+        return `HTTP ${response.status}`
+      }
+
+      try {
+        const parsed = JSON.parse(text)
+        if (typeof parsed === 'string') return parsed
+        if (parsed?.message) return parsed.message
+        if (parsed?.error) return parsed.error
+        if (parsed?.detail) return parsed.detail
+        if (parsed?.errors) {
+          if (Array.isArray(parsed.errors)) {
+            return parsed.errors.map(entry => typeof entry === 'string' ? entry : entry.message || JSON.stringify(entry)).join(', ')
+          }
+          return JSON.stringify(parsed.errors)
+        }
+        return JSON.stringify(parsed)
+      } catch (err) {
+        return text
+      }
+    },
     
     async fetchAllVerified() {
       this.loading = true
@@ -405,11 +472,11 @@ export default {
         const data = await res.json()
         
         if (Array.isArray(data)) {
-          this.items = data
+          this.items = this.normalizeItems(data)
         } else if (data && typeof data === 'object') {
-          if (Array.isArray(data.items)) this.items = data.items
-          else if (Array.isArray(data.results)) this.items = data.results
-          else this.items = [data]
+          if (Array.isArray(data.items)) this.items = this.normalizeItems(data.items)
+          else if (Array.isArray(data.results)) this.items = this.normalizeItems(data.results)
+          else this.items = this.normalizeItems([data])
         } else {
           this.items = []
         }
@@ -563,13 +630,13 @@ export default {
         }
 
         if (Array.isArray(data)) {
-          this.items = data
+          this.items = this.normalizeItems(data)
         } else if (data && typeof data === 'object') {
-          if (Array.isArray(data.items)) this.items = data.items
-          else if (Array.isArray(data.results)) this.items = data.results
-          else this.items = [data]
+          if (Array.isArray(data.items)) this.items = this.normalizeItems(data.items)
+          else if (Array.isArray(data.results)) this.items = this.normalizeItems(data.results)
+          else this.items = this.normalizeItems([data])
         } else if (typeof data === 'string') {
-          this.items = [data]
+          this.items = this.normalizeItems([data])
         } else {
           this.items = []
         }
@@ -668,6 +735,51 @@ export default {
           return 'row-unverified'
         }
         return 'row-unknown'
+      }
+    },
+    async uploadPdf(item) {
+      if (!item.domainName || !item.extension) {
+        this.setItemUploadState(item, 'error', 'Missing domain name or extension for upload')
+        return
+      }
+
+      const accessToken = await ensureValidToken()
+      if (!accessToken) {
+        this.setItemUploadState(item, 'error', 'Authentication required. Please sign in again.')
+        return
+      }
+
+      this.setItemUploadState(item, 'loading')
+
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const response = await fetch(`${apiBase}/api/domain-verification/pdf/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            domainName: item.domainName,
+            extension: item.extension
+          })
+        })
+
+        if (response.status === 401) {
+          const message = 'Session expired. Please sign in again.'
+          this.setItemUploadState(item, 'error', message)
+          return
+        }
+
+        if (!response.ok) {
+          const errorMessage = await this.parseErrorResponse(response)
+          throw new Error(errorMessage)
+        }
+
+        this.setItemUploadState(item, 'success')
+      } catch (err) {
+        console.error('PDF upload error:', err)
+        this.setItemUploadState(item, 'error', err.message || 'Failed to upload PDF')
       }
     },
     async downloadPdf(item) {

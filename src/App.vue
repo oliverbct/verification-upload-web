@@ -14,6 +14,7 @@
         <!-- Navigation Menu (always visible when authenticated) -->
         <nav v-if="isAuthenticated" class="main-nav">
           <router-link to="/verification" class="nav-link">Verification</router-link>
+          <router-link to="/bulk-upload" class="nav-link">Bulk Upload</router-link>
         </nav>
         
         <!-- User Info (when authenticated) -->
