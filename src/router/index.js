@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Verification from '../views/Verification.vue'
 import BulkUpload from '../views/BulkUpload.vue'
+import BatchDetails from '../views/BatchDetails.vue'
 
 const routes = [
   {
@@ -18,6 +19,11 @@ const routes = [
     path: '/bulk-upload',
     name: 'BulkUpload',
     component: BulkUpload
+  },
+  {
+    path: '/bulk-upload/:batchId',
+    name: 'BatchDetails',
+    component: BatchDetails
   }
 ]
 
