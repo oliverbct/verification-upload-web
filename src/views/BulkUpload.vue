@@ -473,7 +473,7 @@ export default {
 }
 
 .container {
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
   background: white;
   border-radius: 16px;
@@ -804,7 +804,7 @@ button:disabled {
 .state-message { padding: 28px 8px; color: #6c757d; text-align: center; }
 .inline-action { margin-left: 8px; background: #f8d7da; color: #842029; }
 .table-wrap { overflow-x: auto; }
-.table-wrap table { width: 100%; min-width: 980px; border-collapse: collapse; }
+.table-wrap table { width: 100%; min-width: 1100px; border-collapse: collapse; }
 .table-wrap th, .table-wrap td { padding: 13px 12px; border-bottom: 1px solid #e9ecef; text-align: left; vertical-align: middle; }
 .table-wrap th { background: #f8f9fa; color: #495057; font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
 .batch-id, .file-name { font-weight: 700; }
