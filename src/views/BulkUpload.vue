@@ -77,7 +77,9 @@
                   <button v-if="canCancel(batch)" class="action-button cancel-button" :disabled="cancellingBatchId === batch.batchId" @click="cancelBatch(batch)">
                     {{ cancellingBatchId === batch.batchId ? 'Cancelling...' : 'Cancel' }}
                   </button>
-                  <button v-else-if="batch.status === 'COMPLETED'" class="action-button download-button" title="Download is not available yet" @click.stop="downloadBatch">Download</button>
+                  <button v-else-if="batch.status === 'COMPLETED'" class="action-button download-button" :disabled="downloadingBatchId === batch.batchId" @click.stop="downloadBatch(batch)">
+                    {{ downloadingBatchId === batch.batchId ? 'Preparing...' : 'Download' }}
+                  </button>
                   <button v-else-if="batch.status === 'FAILED'" class="action-button error-button" :title="batch.zipError || 'Batch failed'" @click.stop>View error</button>
                   <span v-else>-</span>
                 </td>
@@ -146,6 +148,7 @@ export default {
       batchesLoading: false,
       batchesError: '',
       cancellingBatchId: null,
+      downloadingBatchId: null,
       actionMessage: '',
       pollingTimer: null
     }
@@ -201,7 +204,37 @@ export default {
       return ['QUEUED', 'PROCESSING', 'ZIPPENDING'].includes(batch.status)
     },
 
-    downloadBatch() {},
+    async downloadBatch(batch) {
+      if (batch.status !== 'COMPLETED' || this.downloadingBatchId !== null) return
+      const accessToken = await ensureValidToken()
+      if (!accessToken) {
+        this.actionMessage = 'Authentication required. Please sign in again.'
+        return
+      }
+
+      this.downloadingBatchId = batch.batchId
+      this.actionMessage = ''
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const response = await fetch(`${apiBase}/api/domain-verification/pdf/upload/batches/${encodeURIComponent(batch.batchId)}/download-url`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        if (response.status === 401) {
+          window.dispatchEvent(new CustomEvent('session-expired'))
+          throw new Error('Session expired. Please sign in again.')
+        }
+        if (response.status === 404) throw new Error('This batch no longer exists.')
+        if (response.status === 409) throw new Error('ZIP is not ready yet. Please try again shortly.')
+        if (!response.ok) throw new Error(await response.text().catch(() => `HTTP ${response.status}`))
+        const result = await response.json()
+        window.location.assign(result.downloadUrl)
+      } catch (error) {
+        this.actionMessage = error.message || 'Unable to download batch.'
+      } finally {
+        this.downloadingBatchId = null
+      }
+    },
 
     async cancelBatch(batch) {
       if (!this.canCancel(batch) || this.cancellingBatchId !== null) return

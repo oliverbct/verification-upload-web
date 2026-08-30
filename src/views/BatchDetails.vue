@@ -38,6 +38,12 @@
           </div>
           <p v-if="batch?.createdAt" class="created-date">Created {{ formatDate(batch.createdAt) }}</p>
           <p v-if="batch?.zipError" class="zip-error">ZIP error: {{ batch.zipError }}</p>
+          <div v-if="batch?.status === 'COMPLETED'" class="summary-actions">
+            <button class="primary-button" :disabled="downloading" @click="downloadBatch">
+              {{ downloading ? 'Preparing...' : 'Download ZIP' }}
+            </button>
+            <span v-if="downloadMessage" class="download-message">{{ downloadMessage }}</span>
+          </div>
         </section>
 
         <section class="jobs-panel" aria-labelledby="jobs-heading">
@@ -96,6 +102,8 @@ export default {
       loading: false,
       errorMessage: '',
       notFound: false,
+      downloading: false,
+      downloadMessage: '',
       pollingTimer: null
     }
   },
@@ -212,6 +220,38 @@ export default {
       this.$router.push('/bulk-upload')
     },
 
+    async downloadBatch() {
+      if (this.batch?.status !== 'COMPLETED' || this.downloading) return
+      const accessToken = await ensureValidToken()
+      if (!accessToken) {
+        this.downloadMessage = 'Authentication required. Please sign in again.'
+        return
+      }
+
+      this.downloading = true
+      this.downloadMessage = ''
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const response = await fetch(`${apiBase}/api/domain-verification/pdf/upload/batches/${encodeURIComponent(this.batchId)}/download-url`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        if (response.status === 401) {
+          window.dispatchEvent(new CustomEvent('session-expired'))
+          throw new Error('Session expired. Please sign in again.')
+        }
+        if (response.status === 404) throw new Error('This batch no longer exists.')
+        if (response.status === 409) throw new Error('ZIP is not ready yet. Please try again shortly.')
+        if (!response.ok) throw new Error(await response.text().catch(() => `HTTP ${response.status}`))
+        const result = await response.json()
+        window.location.assign(result.downloadUrl)
+      } catch (error) {
+        this.downloadMessage = error.message || 'Unable to download batch.'
+      } finally {
+        this.downloading = false
+      }
+    },
+
     jobStatus(job) {
       if (job.success === true) return 'COMPLETED'
       if (job.success === false) return 'FAILED'
@@ -280,6 +320,8 @@ h2 { font-size: 1.25rem; }
 .summary-metrics span, .created-date, .job-count { color: #6c757d; font-size: .9rem; }
 .created-date { margin: 20px 0 0; }
 .zip-error { margin: 12px 0 0; color: #b02a37; }
+.summary-actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.download-message { color: #6c757d; font-size: .9rem; }
 .job-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
 .job-filter { padding: 8px 14px; border: 1px solid #ced4da; border-radius: 999px; background: #fff; color: #495057; font-weight: 700; cursor: pointer; }
 .job-filter.active { border-color: #dc3545; background: #dc3545; color: #fff; }
