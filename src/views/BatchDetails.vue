@@ -74,13 +74,35 @@
                   <td class="domain-name">{{ job.domain || '-' }}</td>
                   <td><span class="status-pill" :class="jobStatusClass(job)">{{ jobStatusLabel(job) }}</span></td>
                   <td>{{ formatDate(job.startedAt) }}</td>
-                  <td class="error-cell" :title="job.error || ''">{{ job.error || '-' }}</td>
+                  <td class="error-cell">
+                    <template v-if="job.error">
+                      <span>{{ jobErrorSummary(job.error) }}</span>
+                      <a href="#" class="more-details-link" @click.prevent="openJobError(job)">Show details</a>
+                    </template>
+                    <template v-else>-</template>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
       </template>
+    </div>
+
+    <div v-if="selectedJobError" class="modal-overlay" @click="selectedJobError = null">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>Job #{{ selectedJobError.jobId }} error details</h3>
+          <button class="modal-close" @click="selectedJobError = null">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p v-if="selectedJobError.domain"><strong>Domain:</strong> {{ selectedJobError.domain }}</p>
+          <pre>{{ selectedJobError.error }}</pre>
+        </div>
+        <div class="modal-footer">
+          <button class="close-btn" @click="selectedJobError = null">Close</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -104,6 +126,7 @@ export default {
       notFound: false,
       downloading: false,
       downloadMessage: '',
+      selectedJobError: null,
       pollingTimer: null
     }
   },
@@ -270,6 +293,17 @@ export default {
       return String(value || '').trim().toLowerCase()
     },
 
+    jobErrorSummary(error) {
+      if (!error) return ''
+      const stackStart = error.indexOf(' at ')
+      const summary = stackStart > -1 ? error.slice(0, stackStart) : error
+      return summary.replace(/^[\w$.]+(?:Exception|Error):\s*/, '').trim()
+    },
+
+    openJobError(job) {
+      this.selectedJobError = { jobId: job.jobId, domain: job.domain, error: job.error }
+    },
+
     displayBatchStatus(status) {
       if (status === 'QUEUED') return 'Queued'
       if (['PROCESSING', 'ZIPPENDING', 'ZIPBUILDING'].includes(status)) return 'In Progress'
@@ -342,6 +376,71 @@ th { background: #f8f9fa; color: #495057; font-size: .78rem; letter-spacing: .04
 .status-pill.failed { background: #f8d7da; color: #b02a37; }
 .status-pill.canceled, .status-pill.unknown { background: #e2e3e5; color: #41464b; }
 .error-cell { max-width: 420px; color: #b02a37; overflow-wrap: anywhere; }
+.more-details-link { margin-left: 8px; color: #0a58ca; font-weight: 700; text-decoration: underline; white-space: nowrap; }
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 640px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+.modal-header h3 { margin: 0; color: #495057; font-size: 1.2rem; }
+.modal-close {
+  background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;
+  padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+}
+.modal-close:hover { background: #e9ecef; color: #495057; }
+.modal-body { padding: 24px; overflow-y: auto; flex: 1; }
+.modal-body pre {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  color: #212529;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 20px 24px;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+.close-btn {
+  background: #e9ecef;
+  color: #212529;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
 @media (max-width: 700px) {
   .batch-details-page { padding: 20px 10px; }
   .page-heading { flex-direction: column; }
