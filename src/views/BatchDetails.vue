@@ -295,8 +295,12 @@ export default {
 
     jobErrorSummary(error) {
       if (!error) return ''
-      const stackStart = error.indexOf(' at ')
-      const summary = stackStart > -1 ? error.slice(0, stackStart) : error
+      // Stack trace frames start on their own line as "\tat ..." (or " at ..." if
+      // whitespace got collapsed), so cut off at whichever pattern appears first.
+      const newlineIndex = error.indexOf('\n')
+      const inlineAtIndex = error.search(/\s+at\s+\S+\(/)
+      const cutIndex = [newlineIndex, inlineAtIndex].filter((i) => i > -1).sort((a, b) => a - b)[0]
+      const summary = cutIndex !== undefined ? error.slice(0, cutIndex) : error
       return summary.replace(/^[\w$.]+(?:Exception|Error):\s*/, '').trim()
     },
 
