@@ -7,36 +7,43 @@
           <h1>Bulk upload</h1>
           <p class="intro">Schedule a CSV for background processing and track its progress here.</p>
         </div>
-        <button class="refresh-btn" :disabled="batchesLoading" @click="loadBatches">
-          {{ batchesLoading ? 'Refreshing...' : 'Refresh batches' }}
-        </button>
       </div>
 
       <section class="upload-card" aria-labelledby="schedule-heading">
         <div class="section-heading">
-          <div><p class="eyebrow">New job</p><h2 id="schedule-heading">Schedule a CSV</h2></div>
+          <div><p class="eyebrow">New job</p><h2 id="schedule-heading">Schedule a batch</h2></div>
           <span class="schedule-note">Processing continues in the background</span>
         </div>
-        <div class="file-controls">
+        <div class="mode-tabs" role="tablist" aria-label="Choose how to define the batch">
+          <button class="mode-tab" :class="{ active: uploadMode === 'dateRange' }" role="tab"
+            :aria-selected="uploadMode === 'dateRange'" @click="uploadMode = 'dateRange'">By Verification Date</button>
+          <button class="mode-tab" :class="{ active: uploadMode === 'csv' }" role="tab"
+            :aria-selected="uploadMode === 'csv'" @click="uploadMode = 'csv'">By CSV Upload</button>
+        </div>
+
+        <div v-if="uploadMode === 'dateRange'" class="file-controls">
+          <div class="file-input-group">
+            <label class="upload-label" for="date-range-input">Verification date range</label>
+            <input id="date-range-input" ref="dateRangeInput" type="text" readonly placeholder="Select a start and end date" class="date-range-picker-input" />
+          </div>
+        </div>
+        <div v-else class="file-controls">
           <div class="file-input-group">
             <label class="upload-label" for="csv-file">Choose CSV file</label>
             <input id="csv-file" type="file" accept=".csv,text/csv" @change="handleFileChange" />
           </div>
-          <div class="start-domain-group">
-            <label class="upload-label" for="start-domain">Start domain (optional)</label>
-            <input id="start-domain" v-model="startDomain" placeholder="e.g. example.com.vn" />
-          </div>
         </div>
-        <div v-if="selectedFile" class="file-summary">Selected file: <strong>{{ selectedFile.name }}</strong></div>
+        <div v-if="uploadMode === 'csv' && selectedFile" class="file-summary">Selected file: <strong>{{ selectedFile.name }}</strong></div>
         <div class="schedule-actions">
-          <button class="submit-btn" :disabled="!selectedFile || scheduling" @click="submitUpload">
-            {{ scheduling ? 'Scheduling...' : 'Schedule batch' }}
+          <button class="submit-btn" :disabled="!canCreateBatch || scheduling || dateRangeFetching" @click="createBatch">
+            {{ createBatchLabel }}
           </button>
           <span v-if="scheduleMessage" class="success-message">{{ scheduleMessage }}</span>
           <span v-if="scheduleError" class="error-message">
             {{ scheduleError }}
             <a v-if="scheduleErrorDetails" href="#" class="more-details-link" @click.prevent="showErrorDetailsModal = true">More Details</a>
           </span>
+          <span v-if="dateRangeError" class="error-message">{{ dateRangeError }}</span>
         </div>
       </section>
 
@@ -119,22 +126,70 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showDateRangeModal" class="modal-overlay" @click="closeDateRangeModal">
+      <div class="modal-content date-range-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Confirm domains for batch</h3>
+          <button class="modal-close" @click="closeDateRangeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="section-heading">
+            <span class="batch-count">{{ dateRangeDomains.length }} domain(s) found</span>
+          </div>
+          <div class="search-row">
+            <label for="date-range-filter">Filter by domain name</label>
+            <input id="date-range-filter" v-model="dateRangeFilterText" type="search" placeholder="Contains..." />
+          </div>
+          <div v-if="!dateRangeDomains.length" class="state-message">No domains match this date range.</div>
+          <template v-else>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Domain</th><th>Verification date</th></tr></thead>
+                <tbody>
+                  <tr v-for="(domain, index) in paginatedDateRangeDomains" :key="`${domain.domainName}${domain.extension}-${index}`">
+                    <td>{{ domain.domainName }}{{ domain.extension }}</td>
+                    <td>{{ domain.dateVerified }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination-bar">
+              <label for="date-range-page-size">Rows per page</label>
+              <select id="date-range-page-size" v-model.number="dateRangePageSize"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option></select>
+              <span>Page {{ dateRangePage }} of {{ totalDateRangePages }}</span>
+              <button class="page-btn" :disabled="dateRangePage === 1" @click="dateRangePage--">Previous</button>
+              <button class="page-btn" :disabled="dateRangePage === totalDateRangePages" @click="dateRangePage++">Next</button>
+            </div>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button class="close-btn" @click="closeDateRangeModal">Cancel</button>
+          <button class="submit-btn" :disabled="!dateRangeDomains.length || dateRangeSubmitting" @click="submitDateRangeBatch">
+            {{ dateRangeSubmitting ? 'Creating batch...' : 'Submit' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import { ensureValidToken } from '../utils/auth.js'
+import flatpickr from 'flatpickr'
+import 'flatpickr/dist/flatpickr.min.css'
 
 const SERVER_PAGE_SIZE = 100
 const POLL_INTERVAL = 5000
 const ACTIVE_STATUSES = new Set(['QUEUED', 'PROCESSING', 'ZIPPENDING', 'ZIPBUILDING'])
 
+
 export default {
   name: 'BulkUpload',
   data() {
     return {
+      uploadMode: 'dateRange',
       selectedFile: null,
-      startDomain: '',
       scheduling: false,
       scheduleMessage: '',
       scheduleError: '',
@@ -150,7 +205,17 @@ export default {
       cancellingBatchId: null,
       downloadingBatchId: null,
       actionMessage: '',
-      pollingTimer: null
+      pollingTimer: null,
+      showDateRangeModal: false,
+      dateRangeStart: '',
+      dateRangeEnd: '',
+      dateRangeFetching: false,
+      dateRangeError: '',
+      dateRangeDomains: [],
+      dateRangeFilterText: '',
+      dateRangePage: 1,
+      dateRangePageSize: 25,
+      dateRangeSubmitting: false
     }
   },
   computed: {
@@ -178,6 +243,29 @@ export default {
     paginatedBatches() {
       const start = (this.batchPage - 1) * this.batchPageSize
       return this.filteredBatches.slice(start, start + this.batchPageSize)
+    },
+    filteredDateRangeDomains() {
+      const search = this.normalizeSearch(this.dateRangeFilterText)
+      const domains = search
+        ? this.dateRangeDomains.filter(domain => this.normalizeSearch(`${domain.domainName}${domain.extension}`).includes(search))
+        : this.dateRangeDomains
+      return [...domains].sort((a, b) => `${a.domainName}${a.extension}`.localeCompare(`${b.domainName}${b.extension}`))
+    },
+    totalDateRangePages() {
+      return Math.max(1, Math.ceil(this.filteredDateRangeDomains.length / this.dateRangePageSize))
+    },
+    paginatedDateRangeDomains() {
+      const start = (this.dateRangePage - 1) * this.dateRangePageSize
+      return this.filteredDateRangeDomains.slice(start, start + this.dateRangePageSize)
+    },
+    canCreateBatch() {
+      return this.uploadMode === 'dateRange'
+        ? Boolean(this.dateRangeStart && this.dateRangeEnd)
+        : Boolean(this.selectedFile)
+    },
+    createBatchLabel() {
+      if (this.uploadMode === 'dateRange') return this.dateRangeFetching ? 'Searching...' : 'Create Batch'
+      return this.scheduling ? 'Creating batch...' : 'Create Batch'
     }
   },
   watch: {
@@ -186,13 +274,24 @@ export default {
     batchSearch() { this.batchPage = 1 },
     totalBatchPages(totalPages) {
       if (this.batchPage > totalPages) this.batchPage = totalPages
+    },
+    dateRangeFilterText() { this.dateRangePage = 1 },
+    dateRangePageSize() { this.dateRangePage = 1 },
+    totalDateRangePages(totalPages) {
+      if (this.dateRangePage > totalPages) this.dateRangePage = totalPages
+    },
+    uploadMode(mode) {
+      if (mode === 'dateRange') this.$nextTick(() => this.initDateRangePicker())
+      else this.destroyDateRangePicker()
     }
   },
   mounted() {
     this.loadBatches()
+    if (this.uploadMode === 'dateRange') this.$nextTick(() => this.initDateRangePicker())
   },
   beforeUnmount() {
     this.stopPolling()
+    this.destroyDateRangePicker()
   },
   methods: {
 
@@ -343,18 +442,8 @@ export default {
         const requests = this.parseCsv(await this.selectedFile.text())
         if (!requests.length) throw new Error('No valid rows found in the CSV file.')
 
-        const trimmedStartDomain = (this.startDomain || '').trim()
-        let filteredRequests = requests
-        if (trimmedStartDomain) {
-          const normalizedStart = this.normalizeDomainValue(trimmedStartDomain)
-          const startIndex = requests.findIndex(request => this.normalizeDomainValue(`${request.domainName}${request.extension}`) === normalizedStart)
-          if (startIndex === -1) throw new Error(`Start domain not found in CSV: ${trimmedStartDomain}`)
-          filteredRequests = requests.slice(startIndex)
-        }
-        if (!filteredRequests.length) throw new Error('No requests remaining after the selected start domain.')
-
         const apiBase = import.meta.env.VITE_API_BASE_URL
-        const requestBody = JSON.stringify({ requests: filteredRequests })
+        const requestBody = JSON.stringify({ requests })
         const response = await fetch(`${apiBase}/api/domain-verification/pdf/upload/bulk`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -389,13 +478,121 @@ export default {
       }
     },
 
-    normalizeDomainValue(value) {
-      return (value || '')
-        .toLowerCase()
-        .trim()
-        .replace(/^https?:\/\//i, '')
-        .replace(/\/$/, '')
-        .replace(/^www\./i, '')
+    createBatch() {
+      if (this.uploadMode === 'dateRange') this.fetchDomainsByDateRange()
+      else this.submitUpload()
+    },
+
+    initDateRangePicker() {
+      this.destroyDateRangePicker()
+      if (!this.$refs.dateRangeInput) return
+      this._dateRangePicker = flatpickr(this.$refs.dateRangeInput, {
+        mode: 'range',
+        dateFormat: 'Y-m-d',
+        maxDate: 'today',
+        onChange: (selectedDates) => {
+          if (selectedDates.length === 2) {
+            this.dateRangeStart = this.toIsoDate(selectedDates[0])
+            this.dateRangeEnd = this.toIsoDate(selectedDates[1])
+          } else {
+            this.dateRangeStart = ''
+            this.dateRangeEnd = ''
+          }
+        }
+      })
+    },
+
+    destroyDateRangePicker() {
+      if (this._dateRangePicker) {
+        this._dateRangePicker.destroy()
+        this._dateRangePicker = null
+      }
+    },
+
+    toIsoDate(date) {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+
+    closeDateRangeModal() {
+      this.showDateRangeModal = false
+    },
+
+    async fetchDomainsByDateRange() {
+      if (this.dateRangeFetching || !this.dateRangeStart || !this.dateRangeEnd) return
+      this.dateRangeError = ''
+      const accessToken = await ensureValidToken()
+      if (!accessToken) {
+        this.dateRangeError = 'Authentication required. Please sign in again.'
+        return
+      }
+
+      this.dateRangeFetching = true
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const params = new URLSearchParams({ startDate: this.dateRangeStart, endDate: this.dateRangeEnd })
+        const response = await fetch(`${apiBase}/api/domain-verification/verified/by-date-range?${params}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        if (response.status === 401) {
+          window.dispatchEvent(new CustomEvent('session-expired'))
+          throw new Error('Session expired. Please sign in again.')
+        }
+        if (response.status === 400) {
+          const body = await response.json().catch(() => ({}))
+          throw new Error(body.error || 'Invalid date range.')
+        }
+        if (!response.ok) throw new Error(await response.text().catch(() => `HTTP ${response.status}`))
+
+        this.dateRangeDomains = await response.json().catch(() => [])
+        this.dateRangeFilterText = ''
+        this.dateRangePage = 1
+        this.showDateRangeModal = true
+      } catch (error) {
+        this.dateRangeError = error.message || 'Unable to fetch domains for this date range.'
+      } finally {
+        this.dateRangeFetching = false
+      }
+    },
+
+    async submitDateRangeBatch() {
+      if (this.dateRangeSubmitting || !this.dateRangeDomains.length) return
+      const accessToken = await ensureValidToken()
+      if (!accessToken) {
+        this.dateRangeError = 'Authentication required. Please sign in again.'
+        return
+      }
+
+      this.dateRangeSubmitting = true
+      this.dateRangeError = ''
+      try {
+        const requests = this.dateRangeDomains.map(domain => ({ domainName: domain.domainName, extension: domain.extension }))
+        const apiBase = import.meta.env.VITE_API_BASE_URL
+        const response = await fetch(`${apiBase}/api/domain-verification/pdf/upload/bulk`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests })
+        })
+        if (response.status === 401) {
+          window.dispatchEvent(new CustomEvent('session-expired'))
+          throw new Error('Session expired. Please sign in again.')
+        }
+        if (!response.ok) throw new Error(await response.text().catch(() => `HTTP ${response.status}`))
+
+        const result = await response.json().catch(() => ({}))
+        const batch = result?.batch || result?.data || result
+        this.scheduleMessage = batch?.batchId
+          ? `Batch #${batch.batchId} scheduled successfully.`
+          : 'Batch scheduled successfully.'
+        await this.loadBatches()
+        this.closeDateRangeModal()
+      } catch (error) {
+        this.dateRangeError = error.message || 'Unable to create batch.'
+      } finally {
+        this.dateRangeSubmitting = false
+      }
     },
 
     normalizeSearch(value) {
@@ -517,18 +714,15 @@ input[type="file"] {
   align-items: end;
 }
 
-.file-input-group,
-.start-domain-group {
+.file-input-group {
   display: flex;
   flex-direction: column;
   min-width: 240px;
 }
 
-.start-domain-group input {
-  padding: 10px 12px;
-  border: 1px solid #dcdcdc;
-  border-radius: 8px;
-}
+.mode-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.mode-tab { padding: 8px 14px; border: 1px solid #ced4da; border-radius: 999px; background: #fff; color: #495057; font-weight: 700; cursor: pointer; }
+.mode-tab.active { border-color: #dc3545; background: #dc3545; color: #fff; }
 
 .controls {
   display: flex;
@@ -727,6 +921,21 @@ button:disabled {
 .success-message { color: #146c43; font-weight: 700; }
 .error-message, .error-state { color: #b02a37; }
 .more-details-link { margin-left: 8px; color: #0a58ca; font-weight: 700; text-decoration: underline; }
+.date-range-modal .modal-body { padding-top: 20px; }
+.date-range-modal .table-wrap table { min-width: 100%; }
+.date-range-picker-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  background: #fff;
+}
+.date-range-picker-input:focus {
+  outline: none;
+  border-color: #dc3545;
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
 
 .modal-overlay {
   position: fixed;
